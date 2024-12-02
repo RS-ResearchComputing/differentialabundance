@@ -3,9 +3,7 @@ process ZIP {
     label 'process_single'
 
     conda 'modules/nf-core/zip/environment.yml'
-    container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
-        'https://depot.galaxyproject.org/singularity/p7zip:16.02' :
-        'biocontainers/p7zip:16.02' }"
+    container "p7zip:16.02"
 
     input:
     tuple val(meta), path(files, stageAs: "inputs/*")

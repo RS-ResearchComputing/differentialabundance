@@ -3,9 +3,7 @@ process FILTER_DIFFTABLE {
     label 'process_single'
 
     conda "pandas=1.5.2"
-    container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
-        'https://depot.galaxyproject.org/singularity/pandas:1.5.2' :
-        'biocontainers/pandas:1.5.2' }"
+    container "pandas:1.5.2"
 
     input:
     tuple val(meta), path(input_file)

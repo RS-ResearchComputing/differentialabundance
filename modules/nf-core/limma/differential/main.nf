@@ -3,9 +3,7 @@ process LIMMA_DIFFERENTIAL {
     label 'process_single'
 
     conda "${moduleDir}/environment.yml"
-    container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
-        'https://depot.galaxyproject.org/singularity/bioconductor-limma:3.54.0--r42hc0cfd56_0' :
-        'biocontainers/bioconductor-limma:3.54.0--r42hc0cfd56_0' }"
+    container "limma:3.54.0--r42hc0cfd56_0"
 
     input:
     tuple val(meta), val(contrast_variable), val(reference), val(target)

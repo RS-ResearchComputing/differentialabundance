@@ -3,9 +3,7 @@ process GEOQUERY_GETGEO {
     label 'process_single'
 
     conda 'modules/nf-core/geoquery/getgeo/environment.yml'
-    container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
-        'https://depot.galaxyproject.org/singularity/bioconductor-geoquery:2.66.0--r42hdfd78af_0' :
-        'biocontainers/bioconductor-geoquery:2.66.0--r42hdfd78af_0' }"
+    container "geoquery:2.66.0--r42hdfd78af_0"
 
     input:
     tuple val(meta), val(querygse)

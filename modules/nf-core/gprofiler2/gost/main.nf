@@ -3,9 +3,7 @@ process GPROFILER2_GOST {
     label 'process_single'
 
     conda "${moduleDir}/environment.yml"
-    container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
-        'https://depot.galaxyproject.org/singularity/mulled-v2-3712554873398d849d0d11b22440f41febbc4ede:aa19bb8afc0ec6456a4f3cd650f7577c3bbdd4f3-0':
-        'biocontainers/mulled-v2-3712554873398d849d0d11b22440f41febbc4ede:aa19bb8afc0ec6456a4f3cd650f7577c3bbdd4f3-0' }"
+    container "mulled-v2-3712554873398d849d0d11b22440f41febbc4ede:aa19bb8afc0ec6456a4f3cd650f7577c3bbdd4f3-0"
 
     input:
     tuple val(meta), path(de_file)
