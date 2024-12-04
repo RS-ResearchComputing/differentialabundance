@@ -3,7 +3,7 @@ process SHINYNGS_VALIDATEFOMCOMPONENTS {
     label 'process_single'
 
     conda "${moduleDir}/environment.yml"
-    container "r-shinyngs:1.8.8--r43hdfd78af_0"
+    container "r-shinyngs-1.8.8--r43hdfd78af_0"
 
     input:
     tuple val(meta),  path(sample), path(assay_files)

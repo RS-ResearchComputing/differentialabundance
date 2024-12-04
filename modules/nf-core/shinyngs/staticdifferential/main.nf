@@ -3,7 +3,7 @@ process SHINYNGS_STATICDIFFERENTIAL {
     label 'process_single'
 
     conda "${moduleDir}/environment.yml"
-    container "r-shinyngs:1.8.8--r43hdfd78af_0"
+    container "r-shinyngs-1.8.8--r43hdfd78af_0"
 
     input:
     tuple val(meta), path(differential_result)                              // Differential info: contrast and differential stats
