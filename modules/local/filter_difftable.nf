@@ -12,6 +12,8 @@ process FILTER_DIFFTABLE {
 
     output:
     tuple val(meta), path("*_filtered.tsv") , emit: filtered
+    tuple val(meta), path("*_significant_gene_set.txt") , emit: significant_gs
+    tuple val(meta), path("*_background_gene_set.txt") , emit: background_gs
     path "versions.yml"                     , emit: versions
 
     when:
@@ -35,6 +37,9 @@ process FILTER_DIFFTABLE {
         exit("Please provide a .csv, .tsv or .txt file!")
 
     table = pd.read_csv("$input_file", sep=("," if "$input_file".endswith(".csv") else "\t"), header=0)
+
+    table["gene_id"].str.split('.', expand=True)[0].to_csv(path.splitext(path.basename("$input_file"))[0]+"_background_gene_set.txt", sep="\t", index=False, header=False)
+
     logFC_threshold = log2(float("$FC_threshold"))
     table = table[~table["$logFC_column"].isna() &
                 ~table["$padj_column"].isna() &
@@ -42,6 +47,8 @@ process FILTER_DIFFTABLE {
                 (pd.to_numeric(table["$padj_column"], errors='coerce') <= float("$padj_threshold"))]
 
     table.to_csv(path.splitext(path.basename("$input_file"))[0]+"_filtered.tsv", sep="\t", index=False)
+
+    table["gene_id"].str.split('.', expand=True)[0].to_csv(path.splitext(path.basename("$input_file"))[0]+"_significant_gene_set.txt", sep="\t", index=False, header=False)
 
     with open('versions.yml', 'a') as version_file:
         version_file.write('"${task.process}":' + "\\n")
