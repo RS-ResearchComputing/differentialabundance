@@ -98,7 +98,8 @@ citations_file = file(params.citations_file, checkIfExists: true)
 */
 
 include { TABULAR_TO_GSEA_CHIP } from '../modules/local/tabular_to_gsea_chip'
-include { FILTER_DIFFTABLE } from '../modules/local/filter_difftable'
+include { FILTER_DIFFTABLE     } from '../modules/local/filter_difftable'
+include { DESEQ2_HEATMAP       } from '../modules/local/deseq2/heatmap/main'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -408,6 +409,17 @@ workflow DIFFERENTIALABUNDANCE {
         ch_logfc,
         ch_padj
     )
+
+    DESEQ2_HEATMAP(
+        ch_differential.map{it[1]}.collect(),
+        ch_logfc,
+        ch_padj,
+        ch_contrasts_file
+    )
+
+    ch_versions = ch_versions
+        .mix(FILTER_DIFFTABLE.out.versions)
+        .mix(DESEQ2_HEATMAP.out.versions)
 
     // Run a gene set analysis where directed
 
