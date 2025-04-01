@@ -918,8 +918,8 @@ if (any(unlist(params[paste0(possible_gene_set_methods, '_run')]))){
             gmt_name <- basename(tools::file_path_sans_ext(gmt_file))
             cat("\n##### ", gmt_name ," {.tabset}\n")
 
-            reference_gsea_tables <- paste0(contrasts$id, ".", gmt_name, '.gsea_report_for_', contrasts$reference, '.tsv')
-            target_gsea_tables <- paste0(contrasts$id, ".", gmt_name, '.gsea_report_for_', contrasts$target, '.tsv')
+            reference_gsea_tables <- paste0(contrasts$id, ".", contrasts$variable, ".", gmt_name, '.gsea_report_for_', contrasts$reference, '.tsv')
+            target_gsea_tables <- paste0(contrasts$id, ".", contrasts$variable, ".", gmt_name, '.gsea_report_for_', contrasts$target, '.tsv')
             for (i in 1:nrow(contrasts)){
                 cat("\n###### ", contrast_descriptions[i], "\n")
                 target_gsea_results <- read_metadata(target_gsea_tables[i])[,c(-2,-3)]

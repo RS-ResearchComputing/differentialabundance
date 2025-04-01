@@ -100,6 +100,7 @@ citations_file = file(params.citations_file, checkIfExists: true)
 include { TABULAR_TO_GSEA_CHIP } from '../modules/local/tabular_to_gsea_chip'
 include { FILTER_DIFFTABLE     } from '../modules/local/filter_difftable'
 include { DESEQ2_HEATMAP       } from '../modules/local/deseq2/heatmap/main'
+include { GSEA_HEATMAP         } from '../modules/local/gsea/heatmap/main'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -472,11 +473,21 @@ workflow DIFFERENTIALABUNDANCE {
 
         ch_gsea_results = GSEA_GSEA.out.report_tsvs_ref
             .join(GSEA_GSEA.out.report_tsvs_target)
+        
+        // Include GSEA custom heatmap module
+
+        GSEA_HEATMAP(
+            GSEA_GSEA.out.report_tsvs_ref
+            .mix(GSEA_GSEA.out.report_tsvs_target)
+            .map{it[1]}
+            .collect()
+        )
 
         // Record GSEA versions
         ch_versions = ch_versions
             .mix(TABULAR_TO_GSEA_CHIP.out.versions)
             .mix(GSEA_GSEA.out.versions)
+            .mix(GSEA_HEATMAP.out.versions)
     }
 
     if (params.gprofiler2_run) {
