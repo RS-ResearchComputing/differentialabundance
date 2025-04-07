@@ -50,6 +50,40 @@ is_valid_string <- function(input) {
   !is.null(input) && nzchar(trimws(input))
 }
 
+#' Adjust Sizes
+#'
+#' This function adjusts the sizes of the input ratios
+#' to ensure that none are below a specified minimum ratio.
+#' It redistributes the remaining proportion to the other ratios.
+#'
+#' @param sizes A numeric vector of sizes.
+#' @param min_ratio A numeric value specifying the minimum ratio.
+#' @return A numeric vector of adjusted sizes.
+#' @examples
+#'
+#' adjust_sizes(c(0.1, 0.2, 0.3, 0.4), min_ratio = 0.15)
+#' Returns a numeric vector of adjusted sizes.
+
+adjust_sizes <- function(sizes, min_ratio = 0.15) {
+  # Convert sizes to ratios
+  total_size <- sum(sizes)
+  ratios <- sizes / total_size
+
+  # Identify which ratios are below the minimum
+  below_min <- ratios < min_ratio
+  num_below_min <- sum(below_min)
+
+  # Adjust the ratios below the minimum to the minimum value
+  adjusted_ratios <- ratios
+  adjusted_ratios[below_min] <- min_ratio
+
+  # Redistribute the remaining proportion to the other ratios
+  remaining_ratio <- 1 - (num_below_min * min_ratio)
+  adjusted_ratios[!below_min] <- adjusted_ratios[!below_min] / sum(adjusted_ratios[!below_min]) * remaining_ratio #nolint
+
+  return(adjusted_ratios)
+}
+
 #' Create heatmap from GSEA results
 #'
 #' This function creates a heatmap from the GSEA results.
@@ -69,8 +103,10 @@ heatmap_on_contrast_sample <- function(files) {
     sapply(., function(x) paste(x[1], x[2], sep = ".")) #nolint
 
   #Crate table from input files
-  gsea_table <- suppressWarnings(map(files, readr::read_tsv,
-                                     show_col_types = FALSE)) %>%
+  gsea_table <- suppressWarnings(map(files, function(file) {
+    readr::read_tsv(file, show_col_types = FALSE) %>%
+      mutate(across(c("NES", "NOM p-val"), as.double))
+  })) %>%
     set_names(sample) %>%
     enframe(name = "name", value = "value") %>%
     dplyr::filter(purrr::map_int(value, nrow) > 0) %>% #nolint
@@ -107,10 +143,10 @@ heatmap_on_contrast_sample <- function(files) {
     group_by(Signature) %>%
     summarize(size = max(count)) %>%
     dplyr::select(size) #nolint
-  sizes <- sizes[["size"]]
+  sizes <- adjust_sizes(sizes[["size"]], min_ratio = 0.04)
 
   #Build ggplot heatmap
-  ggheatmap <- gsea_table %>%
+  gsea_table %>%
     ggplot(aes(x = Sample, y = Pathway, fill = NES)) + #nolint
     geom_tile() +
     geom_text(aes(label = paste(round(NES, 2), stars, sep = " "),
@@ -138,7 +174,6 @@ heatmap_on_contrast_sample <- function(files) {
     guides(color = guide_legend(override.aes = list(fill = "white")),
            alpha = guide_legend(override.aes = aes(label = ""), fill = "black"))
 
-  return(ggheatmap)
 }
 
 ################################################
@@ -177,7 +212,7 @@ if (length(missing) > 0) {
 ggsave(
     plot = heatmap_on_contrast_sample(files = opt\$input_files), #nolint
     filename = "signature_sample_comparison_heatmap.png",
-    height = 12, width = 9, dpi = 500)
+    height = 15, width = 9, dpi = 500)
 
 
 ################################################
