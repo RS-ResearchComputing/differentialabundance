@@ -404,6 +404,7 @@ workflow DIFFERENTIALABUNDANCE {
     // We'll use a local module to filter the differential tables and create output files that contain only differential features
     ch_logfc = Channel.value([ params.differential_fc_column, params.differential_min_fold_change ])
     ch_padj = Channel.value([ params.differential_qval_column, params.differential_max_qval ])
+    ch_genome = Channel.value(params.genome)
 
     FILTER_DIFFTABLE(
         ch_differential,
@@ -415,7 +416,9 @@ workflow DIFFERENTIALABUNDANCE {
         ch_differential.map{it[1]}.collect(),
         ch_logfc,
         ch_padj,
-        ch_contrasts_file
+        ch_contrasts_file,
+        ch_genome,
+        GUNZIP_GTF.out.gunzip
     )
 
     ch_versions = ch_versions

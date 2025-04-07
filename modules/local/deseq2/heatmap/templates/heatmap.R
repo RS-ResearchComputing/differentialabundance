@@ -12,8 +12,6 @@ suppressPackageStartupMessages({
   library(stringr)
   library(purrr)
   library(ensembldb)
-  library(EnsDb.Hsapiens.v86) #nolint
-  library(org.Hs.eg.db) #nolint
   library(tibble)
   library(matrixStats) #nolint
   library(tidyr)
@@ -49,6 +47,52 @@ is_valid_string <- function(input) {
   !is.null(input) && nzchar(trimws(input))
 }
 
+#' Create custom EnsDB from genome annotation GTF file
+#'
+#' This function creates a custom EnsDB object from a GTF file.
+#' It uses the EnsDb package to create the database
+#' and returns the EnsDb object.
+#'
+#' @param gtf_file Path to the GTF file.
+#' @param genome Genome version (e.g., "hg38").
+#' @return An EnsDb object.
+#' @examples
+#' create_custom_ensdb("path/to/gtf_file.gtf", "hg38")
+
+get_ensdb_from_gtf <- function(
+  gtf_file,
+  genome = "hg38"
+) {
+
+  #SELECT GENOME ANNOTATION
+  if (genome %in% c("hg19", "hg38", "GRCh38", "GRCh37")) { #nolint
+    organism <- "human"
+  } else if (genome %in% c("GRCm38", "GRCm39", "mm10")) {
+    organism <- "mouse"
+  } else {
+    stop("Genome not supported.")
+  }
+
+  #CONVERTING gene_type to gene_biotype
+  gtf_biotype <- "gencode.vM36.fixed.annotation.gtf"
+  gtf_lines <- readLines(gtf_file)
+  gtf_lines <- gsub("gene_type", "gene_biotype", gtf_lines)
+  writeLines(gtf_lines, gtf_biotype)
+
+  #BUILDING THE EnsDb OBJECT
+  db_file <- "Custom_EnsDb.sqlite"
+  ensembldb::ensDbFromGtf(
+    gtf = gtf_biotype, #nolint
+    outfile = db_file,
+    organism = organism,
+    genomeVersion = genome,
+    version = "custom"
+  )
+
+  #LOADING THE EnsDb OBJECT
+  return(ensembldb::EnsDb(db_file))
+}
+
 #' Read DESeq2 Results
 #' Reads unfiltered .deseq2.results.tsv
 #'
@@ -72,7 +116,8 @@ is_valid_string <- function(input) {
 get_deseq2_results <- function(
   files, #nolint
   log2fc = 2,
-  qval = 0.05) {
+  qval = 0.05,
+  ensdb_obj) {
 
   #SPLIT TSV FILES
   files <- str_split(files, " ")[[1]]
@@ -84,10 +129,9 @@ get_deseq2_results <- function(
   #ADD GENE SYMBOL ANNOTATION TO TSVs
   deseq2_results_annotated <- lapply(deseq2_results, function(tsv) {
     tsv %>%
-      mutate(gene_id = str_replace(gene_id, "\\\\..*", "")) %>% #nolint
       mutate(symbol = AnnotationDbi::mapIds(
-                                        EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86, #nolint
-                                        keys = gene_id,
+                                        ensdb_obj, #nolint
+                                        keys = gene_id, #nolint
                                         keytype = "GENEID",
                                         column = "SYMBOL")) %>%
       dplyr::filter(!is.na(symbol)) %>% #nolint
@@ -141,13 +185,14 @@ get_deseq2_results <- function(
 build_matrix_top_genes <- function(
   deseq2_results, #nolint
   nsize = NULL,
-  log2fc = 2) {
+  log2fc = 2,
+  qval = 0.05) {
 
   #GET THE LIST OF SIGNIFICANT GENES FROM EVERY CONTRAST
   lst_sig_genes <- lapply(deseq2_results, function(tsv) {
     tsv %>%
       dplyr::filter(abs(log2FoldChange) >= log2fc & #nolint
-                      padj <= 0.05) %>% #nolint
+                      padj <= qval) %>% #nolint
       dplyr::select(symbol) #nolint
   }) %>%
     bind_rows() %>%
@@ -185,7 +230,7 @@ build_matrix_top_genes <- function(
     as.matrix()
 
   #FORMAT VAR VECTOR IF UNFILTERED
-  if (is.null(nsize)) {
+  if (!is.null(nsize)) {
     var_across_cntrsts <- enframe(var_across_cntrsts,
                                   name = "symbol", value = "Var") %>%
       mutate(
@@ -238,7 +283,7 @@ heatmap_on_contrast <- function(
   }
 
   #COLOUR LEGEND DEFINITION FOR HEATMAP
-  hm_ticks <- c(-log2fc * 2, -log2fc, 0, log2fc, log2fc * 2)
+  hm_ticks <- c(-log2fc * 2.5, -log2fc, 0, log2fc, log2fc * 2.5)
   color_function <- circlize::colorRamp2(
     hm_ticks, #nolint
     c("navy", "skyblue", "white", "lightcoral", "firebrick"))
@@ -287,7 +332,7 @@ barplot_var_on_contrast <- function(
   var_annot, #nolint
   ranked = FALSE) {
 
-  if (ranked) {
+  if (!ranked) {
     bar_data <- sqrt(var_annot)
   } else {
     bar_data <- sqrt(var_annot %>% dplyr::select(-rank) %>% deframe())
@@ -319,7 +364,8 @@ barplot_var_on_contrast <- function(
 
 format_heatmap_per_contrast <- function(
   contrast_file, #nolint
-  build_mat_obj) {
+  build_mat_obj,
+  ranked = FALSE) {
 
   #READ build_matrix OUTPUT
   matrix_deseq2 <- build_mat_obj[1][[1]]
@@ -344,7 +390,7 @@ format_heatmap_per_contrast <- function(
     deframe()
 
   #CREATE HEATMAP OBJECT PER TYPE OF CONTRAST AND log2FC
-  log2foldchange <- list(2, 1.5, 1, 0.5, 0.1)
+  log2foldchange <- list(2, 1.5, 1, 0.5)
   heatmap_grid <- lapply(log2foldchange, function(log2fc) {
 
     heatmap_coll <- lapply(seq_along(group_of_contrasts), function(type) {
@@ -356,14 +402,15 @@ format_heatmap_per_contrast <- function(
 
       hm <- heatmap_on_contrast(
         mat    = matrix, group_cntrst = contrast, log2fc = log2fc,
-        ticks  = (log2fc == tail(log2foldchange, 1)),
+        ticks = TRUE,
+        #ticks  = (log2fc == tail(log2foldchange, 1)), #nolint
         titles = (log2fc == head(log2foldchange, 1)),
         legend = (type == 1)
       )
       return(hm)
     })
 
-    heatmap_var <- barplot_var_on_contrast(var_obj_top)
+    heatmap_var <- barplot_var_on_contrast(var_obj_top, ranked = ranked)
 
     heatmap_row <- ComplexHeatmap::draw(BiocGenerics::Reduce(`+`, heatmap_coll) + heatmap_var) %>% #nolint
       grid::grid.grabExpr()
@@ -393,7 +440,9 @@ opt <- list(
   input_files    = "$input_files",
   lfc_threshold  = "$logFC_threshold",
   qval_threshold = "$padj_threshold",
-  contrast_file  = "$contrasts"
+  contrast_file  = "$contrasts",
+  genome         = "$genome",
+  gtf_file       = "$gtf_file"
 )
 
 # Check if required parameters have been provided
@@ -412,22 +461,57 @@ if (length(missing) > 0) {
 ################################################
 ################################################
 
+#Create custom EnsDb object
+custom_ensdb <- get_ensdb_from_gtf(
+  gtf_file = opt\$gtf_file, #nolint
+  genome   = opt\$genome #nolint
+)
+
 #Read files and filter DESeq2 results
 results <- get_deseq2_results(
-  files  = opt\$input_files, #nolint
-  log2fc = opt\$lfc_threshold, #nolint
-  qval   = opt\$qval_threshold #nolint
+  files     = opt\$input_files, #nolint
+  log2fc    = opt\$lfc_threshold, #nolint
+  qval      = opt\$qval_threshold, #nolint
+  ensdb_obj = custom_ensdb #nolint
 )
+
+#Read contrast file
 contrast_file = read.csv(opt\$contrast_file)
 
-#Read DESeq2 unfiltred matrix
-matrix_results <- build_matrix_top_genes(results[1][[1]])
+#SIZE 5000
+matrix_results <- build_matrix_top_genes(
+  results[1][[1]], #nolint
+  log2fc = opt\$lfc_threshold,
+  qval = opt\$qval_threshold,
+  nsize = 5000
+)
 
-#Create heatmap
-png("all_contrasts_log2fc_heatmap.png", width = 5500, height = 10000, res = 450) #nolint
+# Create heatmap for the current size
+output_file <- "5000_log2fc_heatmap.png"
+png(output_file, width = 5500, height = 10000, res = 450) #nolint
 format_heatmap_per_contrast(
   contrast_file = contrast_file, #nolint
-  build_mat_obj = matrix_results)
+  build_mat_obj = matrix_results,
+  ranked = TRUE
+)
+dev.off()
+
+#SIZE 1000
+matrix_results <- build_matrix_top_genes(
+  results[1][[1]], #nolint
+  log2fc = opt\$lfc_threshold,
+  qval = opt\$qval_threshold,
+  nsize = 1000
+)
+
+# Create heatmap for the current size
+output_file <- "1000_log2fc_heatmap.png"
+png(output_file, width = 5500, height = 10000, res = 450) #nolint
+format_heatmap_per_contrast(
+  contrast_file = contrast_file, #nolint
+  build_mat_obj = matrix_results,
+  ranked = TRUE
+)
 dev.off()
 
 
@@ -454,8 +538,6 @@ readr.version <- as.character(packageVersion('readr'))
 stringr.version <- as.character(packageVersion('stringr'))
 purrr.version <- as.character(packageVersion('purrr'))
 ensembldb.version <- as.character(packageVersion('ensembldb'))
-EnsDb.Hsapiens.v86.version <- as.character(packageVersion('EnsDb.Hsapiens.v86'))
-org.Hs.eg.db.version <- as.character(packageVersion('org.Hs.eg.db'))
 tibble.version <- as.character(packageVersion('tibble'))
 matrixStats.version <- as.character(packageVersion('matrixStats'))
 tidyr.version <- as.character(packageVersion('tidyr'))
@@ -475,8 +557,6 @@ paste('    readr:', readr.version),
 paste('    stringr:', stringr.version),
 paste('    purrr:', purrr.version),
 paste('    ensembldb:', ensembldb.version),
-paste('    EnsDb.Hsapiens:', EnsDb.Hsapiens.v86.version),
-paste('    org.Hs.eg.db:', org.Hs.eg.db.version),
 paste('    tibble:', tibble.version),
 paste('    matrixStats:', matrixStats.version),
 paste('    tidyr:', tidyr.version),
